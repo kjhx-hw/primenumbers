@@ -10,6 +10,12 @@ namespace PrimeNumbers_GUI
 
         private CancellationTokenSource cancellationTokenSource;
 
+        // syncObj method from @servy42 at social.msdn.microsoft.com
+        // I understand how this works, but not why it's so hacky to pause tasks.
+        // At the time I did this, I did not understand the pause to be extra credit.
+        private object syncObj = new object();
+        private bool paused;
+
         public MainForm()
         {
             InitializeComponent();
@@ -21,8 +27,15 @@ namespace PrimeNumbers_GUI
             var token = cancellationTokenSource.Token;
 
             // Find all prime numbers starting between the first and last numbers
-            int firstNum = Convert.ToInt32(startNumTextBox.Text);
-            int lastNum = Convert.ToInt32(endNumTextBox.Text);
+            int firstNum = 0;
+            int lastNum = 0;
+
+            try {
+                firstNum = Convert.ToInt32(startNumTextBox.Text);
+                lastNum = Convert.ToInt32(endNumTextBox.Text);
+            } catch (Exception) {
+                MessageBox.Show("Invalid input. Expected integer.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
 
             numbersTextBox.Clear();
 
@@ -41,6 +54,7 @@ namespace PrimeNumbers_GUI
             // See which numbers are factors and append them to the numbers text box
             await Task.Run(() => {
                 for (int i = firstNum; i <= lastNum; i++) {
+                    lock (syncObj) { };
                     if (token.IsCancellationRequested)
                         break;
 
@@ -93,13 +107,23 @@ namespace PrimeNumbers_GUI
             }
         }
 
-        private void pauseButton_Click(object sender, EventArgs e)
-        {
-            // Pause or resume the current job
+        private void pauseButton_Click(object sender, EventArgs e) {
+            if (paused == false) {
+                Monitor.Enter(syncObj);
+                paused = true;
+                cancelButton.Enabled = false;
+                pauseButton.Text = "Resume";
+                UseWaitCursor = false;
+            } else if (paused == true) {
+                paused = false;
+                Monitor.Exit(syncObj);
+                cancelButton.Enabled = true;
+                pauseButton.Text = "Pause";
+                UseWaitCursor = true;
+            }
         }
 
         private void cancelButton_Click(object sender, EventArgs e) {
-            // Cancel the work done in the for loop
             cancellationTokenSource.Cancel();
         }
     }
